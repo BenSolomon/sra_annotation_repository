@@ -1,0 +1,680 @@
+---
+title: "Assembling and cleaning full SRA metadata"
+output: html_notebook
+---
+
+```{r packages, message=F, warning=F}
+library(tidyverse); library(rjson); library(vroom)
+
+# Import several functions and constants for cleaning
+source("./annotation_cleaning_functions.R")
+source("./non_meaningful_disease_annotations.R")
+source("./real_study_diseases.R")
+source("./ethnicities_list.R")
+source("./meaningful_treatments.R")
+```
+
+# Assembling raw data
+
+#### Load raw data
+```{r}
+df.original_metadata <- vroom("./sra_compiled_metadata2020_10_06_185340.csv") %>% 
+  mutate_all(tolower) %>% 
+  mutate_all(trimws) 
+
+df.values <- read_csv("all_value_annotations_uncleaned.csv")%>% 
+  mutate_all(trimws) %>% 
+  mutate_all(function(x) ifelse(x=="null", NA, x))
+
+df.studies <- read_csv("all_study_title_annotations_uncleaned.csv")%>% 
+  mutate_all(trimws) %>% 
+  mutate_all(function(x) ifelse(x=="null", NA, x))
+```
+
+#### Compiling uncleaned metadata annotations for values and study titles
+```{r Compile values, message=F, warning=F}
+## Original code for converting MetaAnnotator JSON data to a compiled dataframe
+
+# mondo_1 <- "ontology_annotations/allValues_MONDO/"
+# mondo_2 <- "ontology_annotations/missingValues_MONDO/"
+# meddra_1 <- "ontology_annotations/filteredValues_MEDDRA/"
+# meddra_2 <- "ontology_annotations/missingValues_MEDDRA/"
+# bto_1 <- "ontology_annotations/filteredValues_BTO/"
+# bto_2 <- "ontology_annotations/missingValues_BTO/"
+# clo_1 <- "ontology_annotations/filteredValues_CLO/"
+# clo_2 <- "ontology_annotations/missingValues_CLO/"
+# uberon_1 <- "ontology_annotations/filteredValues_UBERON/"
+# uberon_2 <- "ontology_annotations/missingValues_UBERON/"
+# dron_1 <- "ontology_annotations/filteredValues_DRON/"
+# dron_2 <- "ontology_annotations/missingValues_DRON/"
+# 
+# df.original <- create_annotationDF_fromDir(mondo_1) %>% rename(value = attributeName, value_MONDO = attributeName_annotated) %>%
+#   left_join(create_annotationDF_fromDir(bto_1) %>% 
+#               rename(value = attributeName, value_BTO = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(uberon_1) %>% 
+#               rename(value = attributeName, value_UBERON = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(meddra_1) %>% 
+#               rename(value = attributeName, value_MEDDRA = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(clo_1) %>% 
+#               rename(value = attributeName, value_CLO = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(dron_1) %>% 
+#               rename(value = attributeName, value_DRON = attributeName_annotated), by = "value")
+# 
+# df.missing <- create_annotationDF_fromDir(mondo_2) %>% rename(value = attributeName, value_MONDO = attributeName_annotated) %>%
+#   left_join(create_annotationDF_fromDir(bto_2) %>% 
+#               rename(value = attributeName, value_BTO = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(uberon_2) %>% 
+#               rename(value = attributeName, value_UBERON = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(meddra_2) %>% 
+#               rename(value = attributeName, value_MEDDRA = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(clo_2) %>% 
+#               rename(value = attributeName, value_CLO = attributeName_annotated), by = "value") %>%
+#   left_join(create_annotationDF_fromDir(dron_2) %>% 
+#               rename(value = attributeName, value_DRON = attributeName_annotated), by = "value")
+# 
+# df <- df.original %>% bind_rows(df.missing) %>% mutate_all(tolower) %>% distinct()
+# 
+# write_csv(df, "all_value_annotations_uncleaned.csv")
+```
+
+```{r Compile study titles, message=F, warning=F}
+# # Original code for converting MetaAnnotator JSON data to a compiled dataframe
+# 
+# mondo_1 <- "ontology_annotations/studyTitle_MONDO/"
+# mondo_2 <- "ontology_annotations/missing_studyTitle_MONDO/"
+# meddra_1 <- "ontology_annotations/studyTitle_MEDDRA/"
+# meddra_2 <- "ontology_annotations/missing_studyTitle_MEDDRA/"
+# bto_1 <- "ontology_annotations/studyTitle_BTO/"
+# bto_2 <- "ontology_annotations/missing_studyTitle_BTO/"
+# uberon_1 <- "ontology_annotations/studyTitle_UBERON/"
+# uberon_2 <- "ontology_annotations/missing_studyTitle_UBERON/"
+# dron_1 <- "ontology_annotations/studyTitle_DRON/"
+# dron_2 <- "ontology_annotations/missing_studyTitle_DRON/"
+# 
+# df.study <- create_annotationDF_fromDir(mondo_1) %>% rename(study_title = attributeName, value_MONDO = attributeName_annotated) %>%
+#   left_join(create_annotationDF_fromDir(bto_1) %>%
+#               rename(study_title = attributeName, value_BTO = attributeName_annotated), by = "study_title") %>%
+#   left_join(create_annotationDF_fromDir(uberon_1) %>%
+#               rename(study_title = attributeName, value_UBERON = attributeName_annotated), by = "study_title") %>%
+#   left_join(create_annotationDF_fromDir(meddra_1) %>%
+#               rename(study_title = attributeName, value_MEDDRA = attributeName_annotated), by = "study_title") %>%
+#   left_join(create_annotationDF_fromDir(dron_1) %>%
+#               rename(study_title = attributeName, value_DRON = attributeName_annotated), by = "study_title")
+# 
+# df.missing <- create_annotationDF_fromDir(mondo_2) %>% rename(study_title = attributeName, value_MONDO = attributeName_annotated) %>%
+#   left_join(create_annotationDF_fromDir(bto_2) %>%
+#               rename(study_title = attributeName, value_BTO = attributeName_annotated), by = "study_title") %>%
+#   left_join(create_annotationDF_fromDir(uberon_2) %>%
+#               rename(study_title = attributeName, value_UBERON = attributeName_annotated), by = "study_title") %>%
+#   left_join(create_annotationDF_fromDir(meddra_2) %>%
+#               rename(study_title = attributeName, value_MEDDRA = attributeName_annotated), by = "study_title") %>%
+#   left_join(create_annotationDF_fromDir(dron_2) %>%
+#               rename(study_title = attributeName, value_DRON = attributeName_annotated), by = "study_title")
+# 
+# df.study <- df.study %>%
+#   bind_rows(df.missing) %>%
+#   mutate_all(tolower) %>%
+#   distinct()
+# 
+# write_csv(df.study, "all_study_title_annotations_uncleaned.csv")
+```
+
+```{r}
+# df.study <- vroom("all_study_title_annotations_uncleaned.csv")
+```
+# Sample Cleaning
+
+#### Remove duplicate rows
+```{r}
+df.values <- df.values %>% 
+  mutate(entries = apply(., 1, function(x) sum(!is.na(x)))) %>% 
+  group_by(value) %>% 
+  mutate(n = length(value)) %>% 
+  arrange(desc(entries), .by_group = T) %>% 
+  slice(1) %>% 
+  select(-entries, -n) %>% 
+  ungroup()
+```
+
+
+#### Disease 
+```{r}
+# Remove non-meaningful disease annotations
+df.values <- df.values %>% mutate_at(.vars = c("value_MONDO", "value_MEDDRA"), function(x) ifelse(x %in% non_meaningfull_disease_annotations, NA, x))
+
+# Remove obviously incorrect disease annotations
+df.values <- df.values %>% mutate_at(.vars = c("value_MONDO", "value_MEDDRA"), function(x) ifelse(x %in% real_study_diseases, x, NA))
+df.values <- df.values %>% mutate(disease = pmap_chr(list(value_MONDO, value_MEDDRA), disease_recommender))
+```
+
+
+#### Tissue 
+```{r tissueAnnotation}
+df.values <- df.values %>% 
+  mutate(tissue = pmap_chr(
+    list(value_BTO, value_UBERON, value_CLO, value_MONDO, value_MEDDRA), 
+    tissue_recommender))
+```
+
+#### Cell type 
+```{r}
+# Remove non-latin characters (CJK Unified Ideographs, CJK Symbols and Punctuation)
+# https://en.wikipedia.org/wiki/Unicode_block
+df.values <- df.values  %>%
+    mutate(value_CLO = gsub("[\U4E00-\U9FFF\U3000-\U303F]", "", value_CLO)) %>%  
+    mutate(value_CLO = ifelse(value_CLO =="", NA, value_CLO)) %>%  # Convert "" resulting from unicode correction to NA
+    mutate(value_CLO = trimws(value_CLO))
+
+# Apply cell_recommender
+df.values <- df.values %>% 
+    mutate(cell = pmap_chr(
+      list(value_BTO, value_UBERON, value_CLO, value_MONDO, value_MEDDRA), 
+      cell_recommender))
+
+# Apply immune lineage recommendations
+immune_lineage_key <- make_immune_lineage_key()
+df.values <- df.values %>% 
+  filter(grepl(paste(immune_lineage_key$pattern, collapse = "|"), value))  %>% 
+  mutate(immune_lineage = map_chr(value, function(x) immune_lineage_match(x, immune_lineage_key))) %>% 
+  select(value, immune_lineage) %>% 
+  left_join(x=df.values,y=., by = "value") %>% 
+  mutate(immune_lineage = str_remove(immune_lineage, "_monocyte|monocyte_"))
+
+# Apply immune subset recommendations
+immune_subset_key <- make_immune_subset_key()
+immune_name_order_key <- make_immune_name_order()
+df.values <- df.values %>% 
+  filter(!is.na(immune_lineage))  %>%
+  mutate(immune_subset = map2_chr(value, immune_lineage, 
+                        function(x, y) immune_subset_match(x, y, immune_subset_key, immune_name_order_key))) %>%
+  mutate(immune_subset = ifelse(immune_subset == "", immune_lineage, immune_subset)) %>% 
+  select(value, immune_lineage, immune_subset) %>%
+  left_join(x=df.values ,y=., by = c("value", "immune_lineage"))
+
+# Consolidate cell and immune cell recommendation
+df.values <- df.values %>% 
+  mutate(cell = ifelse(
+    !is.na(immune_subset),
+    immune_subset,
+    cell
+  )) %>% 
+  select(-immune_lineage, -immune_subset)
+
+# Apply stem cell recommendations
+stem_subset_key <- make_stem_subset_key()
+df.values <- df.values %>% mutate(stem_cell = ifelse(grepl(stem_pattern, value), "stem cell", NA)) 
+df.values <- df.values %>% 
+  select(value, cell, stem_cell) %>% 
+  filter(stem_cell == "stem cell") %>% 
+  # filter(grepl(paste(stem_subset_key$pattern, collapse = "|"), value))  %>% 
+  mutate(stem_subset = map_chr(value, function(x) stem_subset_match(x, stem_subset_key)))%>% 
+  select(value, stem_subset) %>% 
+  left_join(x=df.values,y=., by = "value") %>% 
+  # Remove stem cell derived cells
+  mutate(stem_cell = ifelse(grepl("derived|differentiate|from", value), NA, stem_cell)) %>% 
+  mutate(stem_subset = ifelse(grepl("derived|differentiate|from", value), NA, stem_subset)) %>% 
+  # Add back derived mesenchymal stem cells
+  mutate(stem_cell = ifelse(grepl("mesenchym", value), "stem cell", stem_cell)) %>%
+  mutate(stem_subset = ifelse(grepl("mesenchym", value), "mesenchymal stem cell", stem_subset)) %>%
+  # Consolidate cell. stem_cell, and stem_subset
+  mutate(cell = ifelse(!is.na(stem_subset), stem_subset, ifelse(!is.na(stem_cell), stem_cell, cell))) %>% 
+  select(-stem_cell, -stem_subset)
+```
+
+#### Cell lines
+
+```{r}
+df.values <- df.values %>% 
+  mutate(is_cell_line = ifelse(!is.na(cell),
+              (cell %in% cell.lines) | 
+                grepl("[ _\\-]line[ s,._\\:\\)]|[ \\-]line$", value),
+              NA)
+  )
+```
+
+#### Healthy samples
+```{r}
+df.values <- df.values %>% mutate(is_healthy = ifelse(
+    grepl("normal|health", value) & !grepl(" and ", value),
+      # values with "and" tend to represent pooled disease and control samples
+    TRUE,
+    NA
+    )
+  )
+```
+
+#### Control Samples
+# Add wt?
+```{r}
+df.values <- df.values %>% mutate(is_control = ifelse(
+    grepl("control|ctrl|placebo", value),
+    TRUE,
+    NA
+    )
+  )
+```
+
+#### Treatment
+```{r}
+df.values <- df.values %>% 
+  # Correct value_DRON with meaningful treatments
+  mutate(match_DRON = ifelse(value_DRON %in% meaningful_treatments, value_DRON, NA)) %>% 
+  # Regex using meaningful_treatments to capture non-value_DRON successful titles
+  # Will also allow more than one match
+  mutate(match_REGEX = unlist(map(value, function(x) {
+    x <- unlist(strsplit(x, " |_|-|/"))
+    x <- paste(unique(x[x %in% meaningful_treatments]), collapse = "_____")
+    ifelse(x == "" | is.na(x), NA, x)
+  }))) %>% 
+  # Combine, giving preference to match_REGEX > match_DRON
+  mutate(treatment = ifelse(is.na(match_REGEX), match_DRON, match_REGEX)) %>%
+  select(-match_DRON, -match_REGEX, treatment)
+```
+
+#### Ethnicity
+```{r}
+ethnicity_key <- tibble(values = 
+  (map(list.ethnicities, function(x) paste(sort(x), collapse="_____")) %>% 
+      map2(names(.), .,
+         function(x, y){
+           tibble(
+             value = x, 
+             ethnicity = y)
+         }
+    ))
+  ) %>% 
+  pull(values) %>%
+  reduce(bind_rows) %>% 
+  filter(ethnicity != "unspecified")
+
+df.values <- df.values %>% 
+  left_join(ethnicity_key, by = "value")
+```
+
+#### Sex 
+```{r}
+sex_key <- make_sex_key()
+
+df.values <- df.values %>% 
+  filter(grepl(paste(sex_key$pattern, collapse = "|"), value))  %>% 
+  mutate(sex = map_chr(value, function(x) sex_match(x, sex_key))) %>% 
+  select(value, sex) %>% 
+  left_join(x=df.values,y=., by = "value") %>% 
+  mutate(sex = ifelse(sex == "female_male", "pooled", sex))
+```
+#### Single cell
+```{r}
+# x <- df.values %>% 
+#   mutate(sc_study = ifelse(grepl(sc_value_pattern, value) &
+#     
+#   ))
+```
+
+
+
+#### Drop columns
+
+```{r}
+df.values <- df.values %>% 
+  select(!contains(c("MONDO", "BTO", "UBERON", "MEDDRA", "CLO", "DRON"))) %>% 
+  rename_at(vars(-value), paste0, ".REC")
+```
+
+# Age annotation
+
+Some notes on age
+- It may be safe to assume that all "unspecified" units are years
+- Almost all week units appear to refer to gestation age, which could be either for a pregnant mother or the fetus
+- Days seem more likely to refer to days of treatment etc. rather than days of life
+
+```{r}
+# Age cleaning
+age.tags <- c("age", "donor_age", "age group", "dev_stage", "patient age", "average age", 
+              "age of infant", "source subject age", "developmental stage", "age at draw", 
+              "age at sampling", "subject age", "sampling age", "age at biopsy", 
+              "age at collection", "age of patient", "age group",  
+              "median age", "age of donor", "age of human", "age of the fetus",
+              "age_category", "age of subjects", "agegroup", "donors age group", "age range")
+
+df.age <- read_csv("./all_tag_values.csv") %>% filter(tag %in% age.tags) %>% 
+  mutate(age_unit = map_chr(value, unit.finder)) %>% 
+  mutate(test = map2_chr(age_unit, value, time.cleaner)) %>% 
+  select(-value, -age_unit) %>% 
+  separate(test, sep = "_____", into = c("value", "age_unit", "age_value")) %>% 
+  mutate_all(function(x) ifelse(x == "NA", NA, x))
+
+# Year cleaning
+year.tags <- c("age_years", "age in years","age_yrs", "patient_age_years")
+
+df.years <- read_csv("./all_tag_values.csv") %>% filter(tag %in% year.tags) %>% 
+  mutate(age_unit = "year") %>% 
+  mutate(test = map2_chr(age_unit, value, time.cleaner)) %>% 
+  select(-value, -age_unit) %>% 
+  separate(test, sep = "_____", into = c("value", "age_unit", "age_value")) %>% 
+  mutate_all(function(x) ifelse(x == "NA", NA, x))
+
+
+# Month cleaning
+month.tags <- c("age(months)")
+
+df.months <-read_csv("./all_tag_values.csv") %>% filter(tag %in% month.tags) %>% 
+  mutate(age_unit = "month") %>% 
+  mutate(test = map2_chr(age_unit, value, time.cleaner)) %>% 
+  select(-value, -age_unit) %>% 
+  separate(test, sep = "_____", into = c("value", "age_unit", "age_value")) %>% 
+  mutate_all(function(x) ifelse(x == "NA", NA, x))
+
+
+# Day cleaning
+# NOTE: Compared to years/months, day more likely to refer to non-age related variables (e.g. days treatment, etc.)
+day.tags <- c("day of life")
+
+df.days <- read_csv("./all_tag_values.csv") %>% filter(tag %in% day.tags) %>% 
+  mutate(age_unit = "day") %>% 
+  mutate(test = map2_chr(age_unit, value, time.cleaner)) %>% 
+  select(-value, -age_unit) %>% 
+  separate(test, sep = "_____", into = c("value", "age_unit", "age_value")) %>% 
+  mutate_all(function(x) ifelse(x == "NA", NA, x))
+
+# Gestational week cleaning
+gw.tags <- c("gestational week", "post conception week", "weeks of gestation", "gestation_age_sample_collection_weeks", "gestational weeks")
+
+df.gw <-  read_csv("./all_tag_values.csv") %>% filter(tag %in% gw.tags) %>% 
+  mutate(age_unit = "week - gestation") %>% 
+  mutate(test = map2_chr(age_unit, value, time.cleaner)) %>% 
+  select(-value, -age_unit) %>% 
+  separate(test, sep = "_____", into = c("value", "age_unit", "age_value")) %>% 
+  mutate_all(function(x) ifelse(x == "NA", NA, x))
+
+# Combine
+df.age <- bind_rows(df.age, df.months, df.days, df.gw)
+rm(df.months, df.days, df.gw, df.years)
+
+# Gestational correction
+df.age <- df.age %>% 
+  mutate(age_unit = 
+  ifelse((age_unit == "category" | grepl("gestation", age_unit)), age_unit, #exclude category unit and units that already note gestation
+    ifelse(
+    grepl("gest|gw|embry|concep|menst|fet", value),
+    paste0(age_unit, " - gestation"),
+    age_unit
+    )
+  ))
+
+df.age <- df.age %>% 
+  rename_at(vars(-value, -tag), paste0, ".REC")
+```
+
+#### Create tag_value compilation
+```{r}
+# df.tag_value <- read_csv("all_tag_values.csv") %>% 
+#   left_join(df.values, by = "value") %>% 
+#   left_join(df.age, by = c("tag", "value")) %>% 
+#   mutate(tag = paste0(tag, ".ORIG")) #necessary to prevent tag name conflicts with already existing column names
+```
+
+#### Identify single cell samples
+
+```{r}
+# df.tag_value <- df.tag_value %>% 
+#   # Mark all samples with a single cell value
+#   mutate(sc_sample = ifelse(grepl(sc_value_pattern, value), TRUE, FALSE)) %>% 
+#   # Mark all samples with a single cell tag
+#   mutate(sc_sample = ifelse(grepl(sc_value_pattern, tag), TRUE, sc_sample)) %>% 
+#   # Falsify samples that have single cell tag but false value
+#   mutate(sc_sample = ifelse(sc_sample == TRUE & grepl(not_sc_pattern, value), FALSE, sc_sample))
+
+```
+
+
+# Study annotation
+
+#### Disease
+```{r}
+# Remove non-meaningful disease annotations
+df.studies <- df.studies %>% mutate_at(.vars = c("value_MONDO", "value_MEDDRA"), function(x) ifelse(x %in% non_meaningfull_disease_annotations, NA, x))
+
+# Remove obviously incorrect disease annotations
+df.studies <- df.studies %>% mutate_at(.vars = c("value_MONDO", "value_MEDDRA"), function(x) ifelse(x %in% real_study_diseases, x, NA))
+
+# Applying disease_recommender
+df.studies <- df.studies %>% mutate(disease = pmap_chr(list(value_MONDO, value_MEDDRA), disease_recommender))
+```
+
+```{r}
+## Capturing un-annotated titles with an additional regex search
+
+# Creating a regex key out of the real_study_diseases list
+study_key <- tibble(id = real_study_diseases, pattern = real_study_diseases) %>% 
+  filter(nchar(pattern) >4) %>% 
+          # exclude patterns < 5 characters which are usually abbreviations 
+          # resulting in off target hits
+  filter(!(pattern %in% c(
+    "stemi" # exclude 'stemi' which will be found in any "systemic" occurence
+  )))
+
+# When multiple matches, will only keep the longest one
+# Prevents results like 'b cell lymphoblastic leukemia_lymphoblastic leukemia_leukemia"
+find_max <- function(x) {x[nchar(x) ==max(nchar(x))]}
+
+# Pattern match updated to include find_max function
+study_pattern_match <- function(input, key){
+  key %>%
+    mutate(match = map2_chr(pattern, id, 
+                            function(pattern, id) ifelse(grepl(pattern, input), id, NA))) %>%
+    filter(!is.na(match)) %>%
+    pull(match) %>%
+    find_max() %>% 
+    paste(., collapse = "_") %>%
+    ifelse(.=="", NA, .)
+}
+
+df.studies <- df.studies %>% 
+  filter(is.na(disease)) %>% 
+  filter(grepl(paste(study_key$pattern, collapse = "|"), study_title))  %>% 
+  mutate(regex = map_chr(study_title, function(x) study_pattern_match(x, study_key))) %>% 
+  select(study_title, regex) %>% 
+  left_join(x=df.studies,y=., by = "study_title") %>% 
+  mutate(study_disease.REC = 
+           ifelse(is.na(disease), regex, disease)) %>% 
+  select(-disease, -regex)
+  
+```
+
+### Treatments
+```{r}
+df.studies <- df.studies %>% 
+  # Correct value_DRON with meaningful treatments
+  mutate(match_DRON = ifelse(value_DRON %in% meaningful_treatments, value_DRON, NA)) %>% 
+  # Regex using meaningful_treatments to capture non-value_DRON successful titles
+  # Will also allow more than one match
+  mutate(match_REGEX = unlist(map(study_title, function(x) {
+    x <- unlist(strsplit(x, " |_|-|/"))
+    x <- paste(unique(x[x %in% meaningful_treatments]), collapse = "_____")
+    ifelse(x == "" | is.na(x), NA, x)
+  }))) %>% 
+  # Combine, giving preference to match_REGEX > match_DRON
+  mutate(study_treatment.REC = ifelse(is.na(match_REGEX), match_DRON, match_REGEX)) %>% 
+  select(-match_DRON, -match_REGEX) %>% 
+  select(!contains(c("MONDO", "BTO", "UBERON", "MEDDRA", "CLO", "DRON")))
+```
+
+### Single cell
+```{r}
+# df.studies <- df.studies %>% 
+#   mutate(sc_study = ifelse(grepl(sc_value_pattern, study_title), TRUE, FALSE)) %>% 
+#   select(!contains(c("MONDO", "BTO", "UBERON", "MEDDRA", "CLO", "DRON")))
+  
+```
+
+
+# Final annotation compilation
+
+### Compile original metadata, value annotation, and study annotation
+```{r}
+df.final <- df.original_metadata  %>%
+  select(sample_accession, study_title, tag, value) %>%
+  mutate_all(tolower) %>%
+  distinct() %>%
+  left_join(df.studies, by = "study_title") %>%
+  left_join(df.values, by = "value") %>%
+  left_join(df.age, by = c("tag", "value")) 
+
+# %>% 
+  # mutate(tag = paste0(tag, ".ORIG")) #necessary to prevent tag name conflicts with already existing column names
+
+# df.final <- df.original_metadata  %>%  
+#   select(sample_accession, study_title, tag, value) %>% 
+#   mutate_all(tolower) %>%
+#   mutate(tag = paste0(tag, ".ORIG")) %>%  #necessary to prevent tag name conflicts with already existing column names
+#   distinct() %>% 
+#   left_join(df.studies, by = "study_title") %>% 
+#   left_join(df.tag_value, by = c("tag", "value"))
+```
+
+### Single cell study identification
+```{r}
+# x <- df.final %>% 
+#   select(sample_accession, study_title, tag, value) %>% 
+#   # Mark all samples with a single cell value
+#   mutate(sc_sample = ifelse(grepl(sc_pattern, value), TRUE, FALSE)) %>%
+#   # Mark all samples with a single cell tag
+#   mutate(sc_sample = ifelse(grepl(sc_pattern, tag), TRUE, sc_sample)) %>%
+#   # Falsify samples that have single cell tag but false value
+#   mutate(sc_sample = ifelse(sc_sample == TRUE & grepl(not_sc_pattern, value), FALSE, sc_sample)) %>% 
+#   # Mark all samples from a study with single cell data
+#   mutate(sc_study = ifelse(grepl(sc_pattern, study_title), TRUE, FALSE))
+
+df.single_cell <- df.final %>% 
+  select(study_title, tag, value) %>% 
+  distinct() %>% 
+  # Mark all samples with a single cell value
+  mutate(sc_sample = ifelse(grepl(sc_pattern, value), TRUE, FALSE)) %>%
+  # Mark all samples with a single cell tag
+  mutate(sc_sample = ifelse(grepl(sc_pattern, tag), TRUE, sc_sample)) %>%
+  # Falsify samples that have single cell tag but false value
+  mutate(sc_sample = ifelse(sc_sample == TRUE & grepl(not_sc_pattern, value), FALSE, sc_sample)) %>% 
+  # Mark all samples from a study with single cell data
+  mutate(sc_study = ifelse(grepl(sc_pattern, study_title), TRUE, FALSE)) %>% 
+  # Compile sc_study and sc_sample
+  mutate(is_sc = sc_sample | sc_study) %>% select(-sc_sample, -sc_study) %>%
+  # Mark study as single cell is any sample in study is marked as single cell
+  group_by(study_title) %>% 
+  summarise(is_sc_study.REC = any(is_sc))
+
+# x %>% count(is_sc_study)
+
+```
+
+### Convert to long format
+```{r}
+# Fold recommended columns into the overall long format
+# Involves pivot_longer recommended columns and row binding them to original values
+df.final <- df.final %>%
+  mutate(tag = paste0(tag, ".ORIG")) %>%  #necessary to prevent tag name conflicts with already existing column names
+  mutate_all(as.character) 
+
+df.final <- df.final %>% 
+  select(-tag, -value) %>% 
+  pivot_longer(
+    col = contains("REC"),
+    names_to = "tag", 
+    values_to = "value") %>% 
+  bind_rows(df.final) %>% 
+  select(sample_accession, sample_accession, tag, value) %>%
+  filter(!is.na(value)) 
+```
+
+### Combining all metadata annotation
+```{r}
+# Join full key to original metadata and split into list column based on study
+# df.final <- df.original_metadata %>%  
+df.final <- df.original_metadata %>%  
+  select(-tag, -value) %>%
+  distinct() %>%
+  left_join(df.final, by = "sample_accession") %>%
+  left_join(df.single_cell, by = "study_title") %>% 
+  mutate(grouping = study_accession) %>%
+  group_by(grouping) %>%
+  nest() %>%
+  ungroup()
+
+# saveRDS(y, "temp_compiled_df.RDS")
+```
+
+```{r, eval=F}
+# # Write studies to long form  
+# df.final %>% head(10) %>% mutate(data = map2(data, grouping, function(data, grouping) write_csv(data, paste0(grouping,"_annotatedMetadata_long.csv"))))
+
+# Write studies to wide form
+df.wide <- df.final %>%
+  mutate(data = map(data, function(x)
+    {
+    pivot_wider(distinct(x),
+                names_from = tag,
+                values_from = value,
+                values_fn = list(value = function(y) paste0(y, collapse = "_____"))
+                # ,
+                # names_repair = "unique"
+                ) %>% 
+      # Order each study DF with base->recommendedVariable->originalVariables
+      relocate(contains("ORIG"), contains("REC"), .after = last_col()) %>% 
+      select(-library_source:-instrument_model, -study_type, -organism, -taxon_id)
+    }
+  )
+  )
+
+
+# saveRDS(df.wide, "compiled_sra_annotation.RDS")
+saveRDS(df.wide, 
+        paste0("./compiled_full_sra_annotation_",
+               format(Sys.time(), "%Y_%m_%d_%H%M%S"),
+               ".RDS"))
+
+# set.seed(10)
+# df.wide %>% sample_n(20) %>% mutate(data = map2(data, grouping, function(data, grouping) write_csv(data, paste0("sra_exported/",grouping,"_annotatedMetadata.csv"))))
+```
+
+
+
+
+# Writing individual study data
+```{r}
+df.wide <- readRDS("../compiled_full_sra_annotation_2020_07_19_122311.RDS")
+```
+
+
+#### Comparing new annotations to same files previously sent to group
+```{r}
+tibble(files = list.files("../sra_exported/")) %>% 
+  filter(grepl("annotated", files)) %>% 
+  mutate(files = str_remove(files, "_annotatedMetadata.csv")) %>% 
+  pull(files) %>% dput()
+  
+```
+```{r}
+hong <- c("srp053046", "srp058773", "srp063875", "srp064652", "srp071876")
+mich <- c("srp073347", "srp076842", "srp078500", "srp079850", "srp089727")
+purv <- c("erp020462", "erp024526", "srp011369", "srp042112", "srp045481")
+all_studies <- c(purv, mich, hong)
+```
+
+```{r}
+df.wide <- readRDS("../compiled_full_sra_annotation_2020_07_19_122311.RDS")
+to_export <- df.wide %>% filter(grouping %in% all_studies)
+to_export %>% 
+  mutate(data = map2(data, grouping, 
+                     function(data, grouping) 
+                       write_csv(data, paste0("../sra_exported/v2/",grouping,"_annotatedMetadata.csv"))))
+
+system("cd ../sra_exported/v2/;rm ../michele_sra_new.zip;ls|tail -n 5|zip ../michele_sra_new.zip -@")
+
+```
+```{r}
+old <- readRDS("../compiled_sra_annotation.RDS")
+old %>% mutate(n = reduce(map(data, nrow), rbind)) %>% summarise(sum(n))
+```
+
+
+
+
