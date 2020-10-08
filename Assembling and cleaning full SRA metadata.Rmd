@@ -744,6 +744,7 @@ hong <- c("srp053046", "srp058773", "srp063875", "srp064652", "srp071876")
 mich <- c("srp073347", "srp076842", "srp078500", "srp079850", "srp089727")
 purv <- c("erp020462", "erp024526", "srp011369", "srp042112", "srp045481")
 all_studies <- c(purv, mich, hong)
+reviewer.df <- tibble("reviewer" = c("hong", "michele", "purvesh"), studies = list(hong, mich, purv))
 ```
 
 ```{r}
@@ -754,8 +755,15 @@ to_export %>%
                      function(data, grouping) 
                        write_csv(data, paste0("../sra_exported/v2/",grouping,"_annotatedMetadata.csv"))))
 
-system("cd ../sra_exported/v2/;rm ../michele_sra_new.zip;ls|tail -n 5|zip ../michele_sra_new.zip -@")
-
+for (i in 1:nrow(reviewer.df)){
+  print(reviewer.df$reviewer[i])
+  search_string <- paste0("'", paste0(reviewer.df$studies[[i]], collapse = "\\|"), "'")
+  # system(paste0("cd ../sra_exported/v2/;ls|grep ", search_string, ))
+  system(sprintf("cd ../sra_exported/v2/;rm ../%s_sra.zip;ls|grep %s|zip ../%s_sra.zip -@", 
+                reviewer.df$reviewer[i],
+                search_string, 
+                reviewer.df$reviewer[i]))
+}
 ```
 
 
