@@ -579,10 +579,30 @@ return_if_match_in_string <- function(string, pattern){
 # test <- c("category_____year", "month")
 # return_if_match_in_string(test, "year")
 
-# Patterns to seach final columns for cell line like names
+## Patterns to search final columns for cell line like names
 cell_line_pattern <- c("cell[ _]line", "(^|[ _-])line([ _-]|\\.ORIG$)") %>% paste(., collapse = "|")
 
+## For strings with multiple logicals, reports if any TRUE
+any_true_in_string <- function(string){
+  unlist(
+    map(
+      strsplit(string, "_____"), 
+      function(x) any(as.logical(x))))
+}
 
+# test <- c("TRUE_____FALSE", "FALSE")
+# any_true_in_string (test)
+
+## Add blank columns to be used by manual reviewers
+add_final_columns <- function(input_df, names_to_add, suffix = ".FINAL"){
+  names_to_add <- paste0(names_to_add, suffix)
+  input_df[,names_to_add]=""
+  return(input_df)
+}
+
+# test_df <- tibble(letters = letters[1:6], LETTERS = LETTERS[1:6])
+# new_cols <- c("new_column_A", "new_column_B")
+# add_final_columns(test_df, new_cols)
 
 #################  ARCHIVE FUNCTIONS ##########################################
 

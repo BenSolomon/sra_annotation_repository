@@ -631,13 +631,27 @@ df.wide <- df.final %>%
 
 # FINAL CLEANING
 
+### Fixing mixed logical values
+- Pivoting to wide results in some samples having combined logicals for a logical column
+  - E.g. `TRUE_____FALSE` for `is_cell_line`
+- Assume that `TRUE` should be greedy (i.e. if any `TRUE` found in a combined logical value for a sample, it should simplify to `TRUE`)
+  - E.g. `TRUE_FALSE` -> `TRUE`
+
+```{r}
+df.wide <- df.wide %>% 
+  mutate(data = map(data, function(sub_df) 
+    sub_df %>% 
+      mutate_at(vars(starts_with("is_")), function(x) 
+        ifelse(grepl("_____", x), any_true_in_string(x), x)))) 
+```
+
 ### Fix combo age values
 - Fixes some combinations that result from pivoting to wide
 - E.g. `age_value` "45_____adult" can be simplified to "45" with a "year" `age_unit`
 
 ```{r, warning = F, message = F}
 # Using column search to deal with studies without age data
-d <- df.wide %>% 
+df.wide <- df.wide %>% 
   mutate(data = map(data, function(sub_df) if("age_unit.REC" %in% names(sub_df)){
     sub_df %>% 
       # If combined unit contains "year", simplify to "year" only
@@ -663,15 +677,13 @@ d <- df.wide %>%
 #       ))
 ```
 
-# Fixing `is_cell_line`
+### Fixing `is_cell_line`
 - Ontology annotation for cell lines isn't perfect resulting in studies that clearly only use cell lines having a mix of T/F
 - Fixed by searching for column names that suggest "cell line"
 - Assume that if every sample has a value for a cell line column, all samples are cell lines regardless of the value
 
 ```{r}
-cell_line_pattern <- c("cell[ _]line", "(^|[ _-])line([ _-]|\\.ORIG$)") %>% paste(., collapse = "|")
-
-d <-df.wide %>% 
+df.wide <-df.wide %>% 
   mutate(data = map(data, function(sub_df) 
     if(
       any( # If there is any cell line column, return true
@@ -682,6 +694,19 @@ d <-df.wide %>%
     sub_df %>% mutate(is_cell_line.REC = TRUE) 
   } else {sub_df}
       ))
+```
+
+### Adding blank `.FINAL` columns to each wide data frame
+- These will be the columns that reviewers manually add the final annotation
+- Pre-specifying these as blank columns will prevent issues with name variation when merging studies back together
+
+```{r}
+new_cols <- c("disease", "tissue", "cell", "is_cell_line", "age", "sex", "ethnicity", "experiment_group", "is_single_cell")
+
+df.wide <- df.wide %>% 
+  mutate(data = map(data, function(x) add_final_columns(input_df = x, 
+                                                        names_to_add = new_cols, 
+                                                        suffix = ".MAN")))
 ```
 
 # WRITE OUTPUTS
@@ -699,8 +724,6 @@ saveRDS(df.wide,
 ```
 
 
-
-
 # Writing individual study data
 ```{r}
 df.wide <- readRDS("./compiled_full_sra_annotation_2020_10_06_192440.RDS")
@@ -715,6 +738,7 @@ tibble(files = list.files("../sra_exported/")) %>%
   pull(files) %>% dput()
   
 ```
+
 ```{r}
 hong <- c("srp053046", "srp058773", "srp063875", "srp064652", "srp071876")
 mich <- c("srp073347", "srp076842", "srp078500", "srp079850", "srp089727")
@@ -765,21 +789,12 @@ b <- df.wide %>%
 ```
 # Converting mixed T____F values for samples
 ```{r}
-any_true_in_string <- function(string){
-  unlist(
-    map(
-      strsplit(string, "_____"), 
-      function(x) any(as.logical(x))))
-}
-
 c <- df.wide %>% 
-  filter(grouping == "erp022839") %>% 
+  sample_n(100) %>% 
   mutate(data = map(data, function(sub_df) 
     sub_df %>% 
       mutate_at(vars(starts_with("is_")), function(x) 
         ifelse(grepl("_____", x), any_true_in_string(x), x)))) 
-
-test$data[test$group == ""]
 ```
 
 
