@@ -14,9 +14,13 @@ source("./ethnicities_list.R")
 source("./meaningful_treatments.R")
 ```
 
-# Assembling raw data
+# TO DO
+- Stem cell: converting to wide creates many sample with a combo value of "<long stem cell name>_____stem"
+- Add ".FINAL" columns to final output
 
-#### Load raw data
+# ASSEMBLE RAW DATA
+
+### Load raw data
 ```{r}
 df.original_metadata <- vroom("./sra_compiled_metadata2020_10_06_185340.csv") %>% 
   mutate_all(tolower) %>% 
@@ -31,7 +35,7 @@ df.studies <- read_csv("all_study_title_annotations_uncleaned.csv")%>%
   mutate_all(function(x) ifelse(x=="null", NA, x))
 ```
 
-#### Compiling uncleaned metadata annotations for values and study titles
+### Compiling uncleaned metadata annotations for values and study titles
 ```{r Compile values, message=F, warning=F}
 ## Original code for converting MetaAnnotator JSON data to a compiled dataframe
 
@@ -122,9 +126,9 @@ df.studies <- read_csv("all_study_title_annotations_uncleaned.csv")%>%
 ```{r}
 # df.study <- vroom("all_study_title_annotations_uncleaned.csv")
 ```
-# Sample Cleaning
+# CLEAN SAMPLE VALUES
 
-#### Remove duplicate rows
+### Remove duplicate rows
 ```{r}
 df.values <- df.values %>% 
   mutate(entries = apply(., 1, function(x) sum(!is.na(x)))) %>% 
@@ -137,7 +141,7 @@ df.values <- df.values %>%
 ```
 
 
-#### Disease 
+### Disease 
 ```{r}
 # Remove non-meaningful disease annotations
 df.values <- df.values %>% mutate_at(.vars = c("value_MONDO", "value_MEDDRA"), function(x) ifelse(x %in% non_meaningfull_disease_annotations, NA, x))
@@ -148,7 +152,7 @@ df.values <- df.values %>% mutate(disease = pmap_chr(list(value_MONDO, value_MED
 ```
 
 
-#### Tissue 
+### Tissue 
 ```{r tissueAnnotation}
 df.values <- df.values %>% 
   mutate(tissue = pmap_chr(
@@ -156,7 +160,7 @@ df.values <- df.values %>%
     tissue_recommender))
 ```
 
-#### Cell type 
+### Cell type 
 ```{r}
 # Remove non-latin characters (CJK Unified Ideographs, CJK Symbols and Punctuation)
 # https://en.wikipedia.org/wiki/Unicode_block
@@ -221,7 +225,7 @@ df.values <- df.values %>%
   select(-stem_cell, -stem_subset)
 ```
 
-#### Cell lines
+### Cell lines
 
 ```{r}
 df.values <- df.values %>% 
@@ -232,7 +236,7 @@ df.values <- df.values %>%
   )
 ```
 
-#### Healthy samples
+### Healthy samples
 ```{r}
 df.values <- df.values %>% mutate(is_healthy = ifelse(
     grepl("normal|health", value) & !grepl(" and ", value),
@@ -243,8 +247,7 @@ df.values <- df.values %>% mutate(is_healthy = ifelse(
   )
 ```
 
-#### Control Samples
-# Add wt?
+### Control Samples - ADD WT?
 ```{r}
 df.values <- df.values %>% mutate(is_control = ifelse(
     grepl("control|ctrl|placebo", value),
@@ -254,7 +257,7 @@ df.values <- df.values %>% mutate(is_control = ifelse(
   )
 ```
 
-#### Treatment
+### Treatment
 ```{r}
 df.values <- df.values %>% 
   # Correct value_DRON with meaningful treatments
@@ -271,7 +274,7 @@ df.values <- df.values %>%
   select(-match_DRON, -match_REGEX, treatment)
 ```
 
-#### Ethnicity
+### Ethnicity
 ```{r}
 ethnicity_key <- tibble(values = 
   (map(list.ethnicities, function(x) paste(sort(x), collapse="_____")) %>% 
@@ -291,7 +294,7 @@ df.values <- df.values %>%
   left_join(ethnicity_key, by = "value")
 ```
 
-#### Sex 
+### Sex 
 ```{r}
 sex_key <- make_sex_key()
 
@@ -302,7 +305,7 @@ df.values <- df.values %>%
   left_join(x=df.values,y=., by = "value") %>% 
   mutate(sex = ifelse(sex == "female_male", "pooled", sex))
 ```
-#### Single cell
+### Single cell
 ```{r}
 # x <- df.values %>% 
 #   mutate(sc_study = ifelse(grepl(sc_value_pattern, value) &
@@ -312,7 +315,7 @@ df.values <- df.values %>%
 
 
 
-#### Drop columns
+### Drop columns
 
 ```{r}
 df.values <- df.values %>% 
@@ -320,7 +323,7 @@ df.values <- df.values %>%
   rename_at(vars(-value), paste0, ".REC")
 ```
 
-# Age annotation
+# CLEAN AGE ANNOTATION
 
 Some notes on age
 - It may be safe to assume that all "unspecified" units are years
@@ -405,7 +408,7 @@ df.age <- df.age %>%
   rename_at(vars(-value, -tag), paste0, ".REC")
 ```
 
-#### Create tag_value compilation
+### Create tag_value compilation
 ```{r}
 # df.tag_value <- read_csv("all_tag_values.csv") %>% 
 #   left_join(df.values, by = "value") %>% 
@@ -413,7 +416,7 @@ df.age <- df.age %>%
 #   mutate(tag = paste0(tag, ".ORIG")) #necessary to prevent tag name conflicts with already existing column names
 ```
 
-#### Identify single cell samples
+### Identify single cell samples
 
 ```{r}
 # df.tag_value <- df.tag_value %>% 
@@ -427,9 +430,9 @@ df.age <- df.age %>%
 ```
 
 
-# Study annotation
+# CLEAN STUDY ANNOTATION
 
-#### Disease
+### Disease
 ```{r}
 # Remove non-meaningful disease annotations
 df.studies <- df.studies %>% mutate_at(.vars = c("value_MONDO", "value_MEDDRA"), function(x) ifelse(x %in% non_meaningfull_disease_annotations, NA, x))
@@ -508,7 +511,7 @@ df.studies <- df.studies %>%
 ```
 
 
-# Final annotation compilation
+# COMPILE ANNOTATIONS
 
 ### Compile original metadata, value annotation, and study annotation
 ```{r}
@@ -585,7 +588,7 @@ df.final <- df.final %>%
   filter(!is.na(value)) 
 ```
 
-### Combining all metadata annotation
+### Combine all metadata, single cell status, and group by study
 ```{r}
 # Join full key to original metadata and split into list column based on study
 # df.final <- df.original_metadata %>%  
@@ -602,6 +605,7 @@ df.final <- df.original_metadata %>%
 # saveRDS(y, "temp_compiled_df.RDS")
 ```
 
+### Nest by study and covert to long format
 ```{r, eval=F}
 # # Write studies to long form  
 # df.final %>% head(10) %>% mutate(data = map2(data, grouping, function(data, grouping) write_csv(data, paste0(grouping,"_annotatedMetadata_long.csv"))))
@@ -623,8 +627,67 @@ df.wide <- df.final %>%
     }
   )
   )
+```
 
+# FINAL CLEANING
 
+### Fix combo age values
+- Fixes some combinations that result from pivoting to wide
+- E.g. `age_value` "45_____adult" can be simplified to "45" with a "year" `age_unit`
+
+```{r, warning = F, message = F}
+# Using column search to deal with studies without age data
+d <- df.wide %>% 
+  mutate(data = map(data, function(sub_df) if("age_unit.REC" %in% names(sub_df)){
+    sub_df %>% 
+      # If combined unit contains "year", simplify to "year" only
+      mutate(age_unit.REC = return_if_match_in_string(age_unit.REC, "year")) %>% 
+      # If combined value includes a number and "adult", simplify unit to "year" only
+      mutate(age_unit.REC = ifelse(grepl("adult", age_value.REC) & grepl("[0-9]", age_value.REC), "year", age_unit.REC)) %>% 
+      # For age_units == "year", if combined value includes a number, simplify to that number
+      mutate(age_value.REC = ifelse(age_unit.REC == "year",extract_numeric(age_value.REC), age_value.REC))
+  } else {sub_df}
+      ))
+
+## Using try() method to deal with studies without age data
+## Works, but don't like the idea of suppressing errors to make something work
+# d <- rbind(test.df, age_test.df) %>% 
+#   mutate(data = map(data, function(sub_df) 
+#     sub_df %>% 
+#       # If combined unit contains "year", simplify to "year" only
+#       mutate(age_unit.REC = try(return_if_match_in_string(age_unit.REC, "year"), silent = T)) %>% 
+#       # If combined value includes a number and "adult", simplify unit to "year" only
+#       mutate(age_unit.REC = try(ifelse(grepl("adult", age_value.REC) & grepl("[0-9]", age_value.REC), "year", age_unit.REC), silent = T)) %>% 
+#       # For age_units == "year", if combined value includes a number, simplify to that number
+#       mutate(age_value.REC = try(ifelse(age_unit.REC == "year",extract_numeric(age_value.REC), age_value.REC), silent = T))
+#       ))
+```
+
+# Fixing `is_cell_line`
+- Ontology annotation for cell lines isn't perfect resulting in studies that clearly only use cell lines having a mix of T/F
+- Fixed by searching for column names that suggest "cell line"
+- Assume that if every sample has a value for a cell line column, all samples are cell lines regardless of the value
+
+```{r}
+cell_line_pattern <- c("cell[ _]line", "(^|[ _-])line([ _-]|\\.ORIG$)") %>% paste(., collapse = "|")
+
+d <-df.wide %>% 
+  mutate(data = map(data, function(sub_df) 
+    if(
+      any( # If there is any cell line column, return true
+        grepl(cell_line_pattern, # Search each column name for cell line pattern
+          grep("\\.ORIG", names(sub_df), value = T) # Search only original tags
+          ))){
+    #If study has cell line tag, mark all samples as being a cell line
+    sub_df %>% mutate(is_cell_line.REC = TRUE) 
+  } else {sub_df}
+      ))
+```
+
+# WRITE OUTPUTS
+
+### Save final df to RDS
+```{r}
 # saveRDS(df.wide, "compiled_sra_annotation.RDS")
 saveRDS(df.wide, 
         paste0("./compiled_full_sra_annotation_",
@@ -640,11 +703,11 @@ saveRDS(df.wide,
 
 # Writing individual study data
 ```{r}
-df.wide <- readRDS("../compiled_full_sra_annotation_2020_07_19_122311.RDS")
+df.wide <- readRDS("./compiled_full_sra_annotation_2020_10_06_192440.RDS")
 ```
 
 
-#### Comparing new annotations to same files previously sent to group
+### Comparing new annotations to same files previously sent to group
 ```{r}
 tibble(files = list.files("../sra_exported/")) %>% 
   filter(grepl("annotated", files)) %>% 
@@ -660,7 +723,7 @@ all_studies <- c(purv, mich, hong)
 ```
 
 ```{r}
-df.wide <- readRDS("../compiled_full_sra_annotation_2020_07_19_122311.RDS")
+# df.wide <- readRDS("./compiled_full_sra_annotation_2020_10_06_192440.RDS")
 to_export <- df.wide %>% filter(grouping %in% all_studies)
 to_export %>% 
   mutate(data = map2(data, grouping, 
@@ -670,11 +733,100 @@ to_export %>%
 system("cd ../sra_exported/v2/;rm ../michele_sra_new.zip;ls|tail -n 5|zip ../michele_sra_new.zip -@")
 
 ```
+
+
+
+
+
+
+
+
+# ONGOING WORK
+
 ```{r}
-old <- readRDS("../compiled_sra_annotation.RDS")
-old %>% mutate(n = reduce(map(data, nrow), rbind)) %>% summarise(sum(n))
+test.df <- df.wide %>% 
+  filter(grouping %in% all_studies)
+```
+
+# Converting T/F NAs to F
+```{r}
+a <- test.df %>% 
+  mutate(data = map(data, function(sub_df) sub_df %>% mutate_at(vars(starts_with("is_")), function(x) ifelse(is.na(x), FALSE, x))))
+```
+
+```{r}
+b <- df.wide %>%
+  sample_n(1000) %>% 
+  mutate(data = map(data, function(sub_df) sub_df %>% select(sample_accession, contains("REC")))) %>% 
+  mutate(data = map(data, function(sub_df) sub_df %>% mutate_all(as.character) %>% pivot_longer(-sample_accession, names_to = "tag", values_to = "value"))) %>% 
+  # select(data) %>% 
+  unnest()
+  
+```
+# Converting mixed T____F values for samples
+```{r}
+any_true_in_string <- function(string){
+  unlist(
+    map(
+      strsplit(string, "_____"), 
+      function(x) any(as.logical(x))))
+}
+
+c <- df.wide %>% 
+  filter(grouping == "erp022839") %>% 
+  mutate(data = map(data, function(sub_df) 
+    sub_df %>% 
+      mutate_at(vars(starts_with("is_")), function(x) 
+        ifelse(grepl("_____", x), any_true_in_string(x), x)))) 
+
+test$data[test$group == ""]
 ```
 
 
 
+Fixing combined ages
+```{r}
+age_groups <- b %>% 
+  filter(grepl("age", tag) & grepl("____", value)) %>% 
+  pull(grouping) %>% 
+  unique() %>% 
+  dput()
+
+age_test.df <- df.wide %>% 
+  filter(grouping %in% age_groups)
+```
+
+
+```{r}
+return_if_match_in_string <- function(string, pattern){
+  result <- unlist(
+    map(
+      strsplit(string, "_____"), 
+      function(x) pattern %in% x))
+  return(ifelse(result, pattern, string))
+}
+
+test <- c("category_____year", "month")
+return_if_match_in_string(test, "year")
+```
+
+
+
+
+
+
+
+
+
+# Add blank final columns
+```{r}
+"disease.FINAL"
+"tissue.FINAL"
+"cell.FINAL"
+"experimental_group.FINAL"
+"age.FINAL"
+"sex.FINAL"
+"ethnicity.FINAL"
+"is_single_cell.FINAL"
+```
 

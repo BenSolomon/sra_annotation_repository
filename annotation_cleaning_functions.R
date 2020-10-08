@@ -564,6 +564,25 @@ sc_pattern <- c("single[ -_]cell", "sc[_-]?rna", "single[ -_]nucle[ui]") %>% pas
 not_sc_pattern <- c("^no$", "^none$", "^false$") %>% paste0(.,collapse = "|")
 
 
+#################  FINAL CLEANING FUNCTIONS ###################################
+
+# Used for final age cleaning to return a pattern if it is found in a combo value
+# that results from pivoting (e.g. year_____category --> year)
+return_if_match_in_string <- function(string, pattern){
+  result <- unlist(
+    map(
+      strsplit(string, "_____"), 
+      function(x) pattern %in% x))
+  return(ifelse(result, pattern, string))
+}
+
+# test <- c("category_____year", "month")
+# return_if_match_in_string(test, "year")
+
+# Patterns to seach final columns for cell line like names
+cell_line_pattern <- c("cell[ _]line", "(^|[ _-])line([ _-]|\\.ORIG$)") %>% paste(., collapse = "|")
+
+
 
 #################  ARCHIVE FUNCTIONS ##########################################
 
